@@ -1,7 +1,10 @@
 from datetime import datetime
 
 from PyQt6.QtCore import QDate, Qt
-from PyQt6.QtGui import QAction, QColor, QPalette
+import sys
+
+from PyQt6.QtGui import QAction, QColor, QKeySequence, QPalette, QShortcut
+from PyQt6.sip import isdeleted
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -13,6 +16,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QDateEdit,
     QSplitter,
@@ -131,7 +135,12 @@ class TaskListItemWidget(QWidget):
 
     def eventFilter(self, obj, event):
         if event.type() == event.Type.MouseButtonPress:
-            if self.list_widget is not None and self.item is not None:
+            if (
+                self.list_widget is not None
+                and self.item is not None
+                and not isdeleted(self.list_widget)
+                and not isdeleted(self.item)
+            ):
                 self.list_widget.setCurrentItem(self.item)
         return super().eventFilter(obj, event)
 
@@ -169,7 +178,7 @@ class MainWindow(QMainWindow):
         root_layout.setContentsMargins(16, 12, 16, 12)
         root_layout.setSpacing(12)
 
-        header = QLabel("我的一天")
+        header = QLabel("任务清单")
         header.setObjectName("HeaderTitle")
         header.setStyleSheet("font-size: 28px; font-weight: 600;")
         root_layout.addWidget(header)
@@ -185,12 +194,21 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(2, 1)
 
         self._build_menu()
+        self._setup_macos_shortcuts()
         self.refresh_tasks()
 
     def _build_menu(self):
         refresh_action = QAction("刷新", self)
         refresh_action.triggered.connect(self.refresh_tasks)
         self.menuBar().addAction(refresh_action)
+
+    def _setup_macos_shortcuts(self):
+        if sys.platform != "darwin":
+            return
+        minimize_shortcut = QShortcut(QKeySequence("Meta+W"), self)
+        minimize_shortcut.activated.connect(self.showMinimized)
+        quit_shortcut = QShortcut(QKeySequence("Meta+Q"), self)
+        quit_shortcut.activated.connect(self.close)
 
     def _build_sidebar(self):
         sidebar = QFrame()
@@ -295,6 +313,12 @@ class MainWindow(QMainWindow):
         self.detail_link = QLineEdit()
         self.detail_link.setPlaceholderText("相关链接")
         self._add_field(layout, "链接", "fa5s.link", self.detail_link)
+
+        self.detail_note = QPlainTextEdit()
+        self.detail_note.setPlaceholderText("备注或描述")
+        self.detail_note.setMinimumHeight(90)
+        self._add_field(layout, "描述", "fa5s.sticky-note", self.detail_note)
+        self.detail_note.installEventFilter(self)
 
         self.detail_priority = QComboBox()
         self.detail_priority.addItem("", "")
@@ -436,6 +460,7 @@ class MainWindow(QMainWindow):
         self.detail_desc.setText(task.description)
         self.detail_status.setCurrentText(task.xstatus)
         self.detail_link.setText(task.link)
+        self.detail_note.setPlainText(task.note)
         if task.priority:
             index = self.detail_priority.findData(task.priority)
             self.detail_priority.setCurrentIndex(index)
@@ -468,13 +493,14 @@ class MainWindow(QMainWindow):
             return
         task_uuid = selected.data(Qt.ItemDataRole.UserRole)
         description = self.detail_desc.text().strip()
+        note = self.detail_note.toPlainText().strip()
         xstatus = self.detail_status.currentText().strip()
         link = self.detail_link.text().strip()
         priority = self.detail_priority.currentData() or "L"
         due = self.detail_due.date().toString("yyyy-MM-dd")
 
         try:
-            self.service.update_task(task_uuid, description, xstatus, link, priority, due)
+            self.service.update_task(task_uuid, description, note, xstatus, link, priority, due)
             self.refresh_tasks()
         except Exception as exc:
             self.show_error(str(exc))
@@ -487,6 +513,11 @@ class MainWindow(QMainWindow):
         if self.current_task_uuid is None:
             return
         self.save_task()
+
+    def eventFilter(self, obj, event):
+        if obj is self.detail_note and event.type() == event.Type.FocusOut:
+            self.auto_save_task()
+        return super().eventFilter(obj, event)
 
     def complete_task(self):
         selected = self.task_list.currentItem()
@@ -529,6 +560,7 @@ class MainWindow(QMainWindow):
         self.detail_desc.clear()
         self.detail_status.setCurrentIndex(0)
         self.detail_link.clear()
+        self.detail_note.clear()
         self.detail_priority.setCurrentIndex(0)
         self.detail_due.setDate(QDate.currentDate())
         self.complete_button.setText("完成")
@@ -537,6 +569,18 @@ class MainWindow(QMainWindow):
 
     def show_error(self, message):
         QMessageBox.critical(self, "错误", message)
+
+    def closeEvent(self, event):
+        confirm = QMessageBox.question(
+            self,
+            "退出应用",
+            "确定退出吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if confirm == QMessageBox.StandardButton.Yes:
+            event.accept()
+        else:
+            event.ignore()
 
     def on_item_check_changed(self, task_uuid: str | None, checked: bool):
         if self.is_populating:

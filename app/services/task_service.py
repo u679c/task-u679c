@@ -10,6 +10,8 @@ TASK_RC_OVERRIDES = [
     "rc.uda.xstatus.label=状态",
     "rc.uda.link.type=string",
     "rc.uda.link.label=链接",
+    "rc.uda.xdesc.type=string",
+    "rc.uda.xdesc.label=描述",
 ]
 
 
@@ -37,6 +39,7 @@ class TaskService:
                     task_id=item.get("id"),
                     uuid=item.get("uuid", ""),
                     description=item.get("description", ""),
+                    note=item.get("xdesc", ""),
                     task_state=item.get("status", ""),
                     xstatus=item.get("xstatus", ""),
                     link=item.get("link", ""),
@@ -54,12 +57,17 @@ class TaskService:
         self,
         task_ref: str,
         description: str,
+        note: str,
         xstatus: str,
         link: str,
         priority: str,
         due: str,
     ) -> None:
         mods = [f"description:{description}"]
+        if note:
+            mods.append(f"xdesc:{note}")
+        else:
+            mods.append("xdesc:")
         if xstatus:
             mods.append(f"xstatus:{xstatus}")
         else:
