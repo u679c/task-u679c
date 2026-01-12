@@ -239,6 +239,7 @@ class MainWindow(QMainWindow):
         self.sort_combo = QComboBox()
         self.sort_combo.addItem("默认", "default")
         self.sort_combo.addItem("优先级：高 → 低", "priority")
+        self.sort_combo.addItem("截止日期：近 → 远", "due")
         self.sort_combo.currentIndexChanged.connect(self.on_sort_changed)
         sort_row.addWidget(sort_label)
         sort_row.addWidget(self.sort_combo, stretch=1)
@@ -388,7 +389,11 @@ class MainWindow(QMainWindow):
             return tasks
         mode = self.sort_combo.currentData()
         if mode != "priority":
-            return tasks
+            if mode != "due":
+                return tasks
+            indexed = list(enumerate(tasks))
+            indexed.sort(key=lambda pair: (self._due_rank(pair[1]), pair[0]))
+            return [task for _, task in indexed]
         indexed = list(enumerate(tasks))
         indexed.sort(key=lambda pair: (self._priority_rank(pair[1]), pair[0]))
         return [task for _, task in indexed]
@@ -397,6 +402,13 @@ class MainWindow(QMainWindow):
     def _priority_rank(task: TaskItem) -> int:
         priority = (task.priority or "L").upper()
         return {"H": 0, "M": 1, "L": 2}.get(priority, 3)
+
+    @staticmethod
+    def _due_rank(task: TaskItem) -> tuple[int, int]:
+        parsed = parse_due_date(task.due)
+        if not parsed:
+            return (1, 0)
+        return (0, parsed.toJulianDay())
 
     def apply_search_filter(self):
         text = self.search_input.text().strip().lower()
