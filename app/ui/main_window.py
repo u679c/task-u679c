@@ -164,7 +164,31 @@ class TaskListItemWidget(QWidget):
         parsed = parse_due_date(due_value)
         if not parsed:
             return f" · 截止 {due_value}"
+        if TaskListItemWidget._is_same_week(parsed, QDate.currentDate()):
+            weekday = TaskListItemWidget._weekday_label(parsed)
+            return f" · 截止 {parsed.toString('yyyy-MM-dd')} {weekday}"
         return f" · 截止 {parsed.toString('yyyy-MM-dd')}"
+
+    @staticmethod
+    def _is_same_week(date: QDate, today: QDate) -> bool:
+        if not date.isValid() or not today.isValid():
+            return False
+        date_week = date.weekNumber()
+        today_week = today.weekNumber()
+        return date_week == today_week
+
+    @staticmethod
+    def _weekday_label(date: QDate) -> str:
+        labels = {
+            1: "周一",
+            2: "周二",
+            3: "周三",
+            4: "周四",
+            5: "周五",
+            6: "周六",
+            7: "周日",
+        }
+        return labels.get(date.dayOfWeek(), "")
 
 
 class MainWindow(QMainWindow):
@@ -633,7 +657,7 @@ class MainWindow(QMainWindow):
     def _add_field(self, layout, label_text, icon_name, widget):
         header_row = QHBoxLayout()
         icon = QLabel()
-        icon.setPixmap(_icon(icon_name, color="#DBEAFE").pixmap(14, 14))
+        icon.setPixmap(_icon(icon_name, color="#AACFFF").pixmap(14, 14))
         header_row.addWidget(icon)
         header_row.addWidget(QLabel(label_text))
         header_row.addStretch(1)
@@ -646,7 +670,6 @@ class MainWindow(QMainWindow):
             if item.data(Qt.ItemDataRole.UserRole) == task_uuid:
                 self.task_list.setCurrentItem(item)
                 return
-
 
 def parse_due_date(value: str) -> QDate | None:
     if not value:
