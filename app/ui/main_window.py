@@ -3,7 +3,7 @@ from datetime import datetime
 from PyQt6.QtCore import QDate, Qt
 import sys
 
-from PyQt6.QtGui import QAction, QColor, QKeySequence, QPalette, QShortcut
+from PyQt6.QtGui import QAction, QColor, QIcon, QKeySequence, QPalette, QShortcut
 from PyQt6.sip import isdeleted
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -24,7 +24,16 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-import qtawesome as qta
+try:
+    import qtawesome as qta
+except ImportError:
+    qta = None
+
+
+def _icon(name: str, color: str) -> QIcon:
+    if qta is None:
+        return QIcon()
+    return qta.icon(name, color=color)
 
 from app.models import TaskItem
 from app.services.task_service import TaskService
@@ -339,9 +348,9 @@ class MainWindow(QMainWindow):
         self.save_button = QPushButton("保存")
         self.complete_button = QPushButton("完成任务")
         self.delete_button = QPushButton("删除")
-        self.save_button.setIcon(qta.icon("fa5s.save", color="#ffffff"))
-        self.complete_button.setIcon(qta.icon("fa5s.check-circle", color="#ffffff"))
-        self.delete_button.setIcon(qta.icon("fa5s.trash", color="#ffffff"))
+        self.save_button.setIcon(_icon("fa5s.save", color="#ffffff"))
+        self.complete_button.setIcon(_icon("fa5s.check-circle", color="#ffffff"))
+        self.delete_button.setIcon(_icon("fa5s.trash", color="#ffffff"))
         button_row.addWidget(self.save_button)
         button_row.addWidget(self.complete_button)
         button_row.addWidget(self.delete_button)
@@ -604,10 +613,10 @@ class MainWindow(QMainWindow):
     def update_complete_button(self, task: TaskItem):
         if task.task_state == "completed":
             self.complete_button.setText("撤销完成")
-            self.complete_button.setIcon(qta.icon("fa5s.undo", color="#ffffff"))
+            self.complete_button.setIcon(_icon("fa5s.undo", color="#ffffff"))
         else:
             self.complete_button.setText("完成")
-            self.complete_button.setIcon(qta.icon("fa5s.check-circle", color="#ffffff"))
+            self.complete_button.setIcon(_icon("fa5s.check-circle", color="#ffffff"))
 
     def update_selection_styles(self):
         selected_item = self.task_list.currentItem()
@@ -624,7 +633,7 @@ class MainWindow(QMainWindow):
     def _add_field(self, layout, label_text, icon_name, widget):
         header_row = QHBoxLayout()
         icon = QLabel()
-        icon.setPixmap(qta.icon(icon_name, color="#DBEAFE").pixmap(14, 14))
+        icon.setPixmap(_icon(icon_name, color="#DBEAFE").pixmap(14, 14))
         header_row.addWidget(icon)
         header_row.addWidget(QLabel(label_text))
         header_row.addStretch(1)
