@@ -13,3 +13,4 @@ class TaskItem:
     priority: str
     project: str
     due: str
+    end: str

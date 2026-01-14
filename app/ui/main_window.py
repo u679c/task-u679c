@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from PyQt6.QtCore import QDate, Qt
 import sys
@@ -79,14 +79,17 @@ class TaskListItemWidget(QWidget):
         priority_text = f"【{priority_label}】" if priority_label else ""
         status_text = task.xstatus or (DEFAULT_STATUS_LABEL if task.task_state != "completed" else "已完成")
         link_text = task.link or "无链接"
+        completion_text = ""
+        if task.task_state == "completed":
+            completion_text = self._format_completed(task.end)
         due_text = self._format_due(task.due)
         if task.link:
             meta_html = (
-                f"{priority_text}{status_text}{due_text} · "
+                f"{priority_text}{status_text}{completion_text}{due_text} · "
                 f"<a href=\"{task.link}\">{link_text}</a>"
             )
         else:
-            meta_html = f"{priority_text}{status_text}{due_text} · {link_text}"
+            meta_html = f"{priority_text}{status_text}{completion_text}{due_text} · {link_text}"
         self.meta_label = QLabel(meta_html)
         self.meta_label.setTextFormat(Qt.TextFormat.RichText)
         self.meta_label.setOpenExternalLinks(True)
@@ -168,6 +171,17 @@ class TaskListItemWidget(QWidget):
             weekday = TaskListItemWidget._weekday_label(parsed)
             return f" · 截止 {parsed.toString('yyyy-MM-dd')} {weekday}"
         return f" · 截止 {parsed.toString('yyyy-MM-dd')}"
+
+    @staticmethod
+    def _format_completed(end_value: str) -> str:
+        if not end_value:
+            return ""
+        parsed = parse_task_datetime(end_value)
+        if not parsed:
+            return f" · 完成 {end_value}"
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone()
+        return f" · 完成 {parsed.strftime('%Y-%m-%d %H:%M')}"
 
     @staticmethod
     def _is_same_week(date: QDate, today: QDate) -> bool:
@@ -691,6 +705,31 @@ def parse_due_date(value: str) -> QDate | None:
         try:
             parsed = datetime.strptime(value[:8], "%Y%m%d")
             return QDate(parsed.year, parsed.month, parsed.day)
+        except ValueError:
+            return None
+    return None
+
+
+def parse_task_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+    patterns = (
+        "%Y%m%dT%H%M%SZ",
+        "%Y%m%dT%H%M%S",
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%dT%H:%M:%S",
+    )
+    for pattern in patterns:
+        try:
+            parsed = datetime.strptime(value, pattern)
+            if pattern.endswith("Z"):
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed
+        except ValueError:
+            continue
+    if len(value) >= 8 and value[:8].isdigit():
+        try:
+            return datetime.strptime(value[:8], "%Y%m%d")
         except ValueError:
             return None
     return None

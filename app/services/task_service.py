@@ -46,6 +46,7 @@ class TaskService:
                     priority=item.get("priority", ""),
                     project=item.get("project", ""),
                     due=item.get("due", ""),
+                    end=item.get("end", ""),
                 )
             )
         return tasks
