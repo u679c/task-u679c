@@ -72,6 +72,16 @@ QPushButton#DetailCloseButton {
 QPushButton#DetailCloseButton:hover {
     color: #111827;
 }
+QPushButton#ExportButton {
+    background: #e5efff;
+    color: #1f5fd1;
+    border: 1px solid #c7dcfb;
+    border-radius: 10px;
+    padding: 6px 10px;
+}
+QPushButton#ExportButton:hover {
+    background: #dbeafe;
+}
 QListWidget {
     background: #ffffff;
     border: 1px solid #dbe6f6;

@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -308,6 +309,12 @@ class MainWindow(QMainWindow):
         self.sort_combo.currentIndexChanged.connect(self.on_sort_changed)
         sort_row.addWidget(sort_label)
         sort_row.addWidget(self.sort_combo, stretch=1)
+        self.export_button = QPushButton("导出")
+        self.export_button.setFixedHeight(35)
+        self.export_button.setObjectName("ExportButton")
+        self.export_button.setIcon(_icon("fa5s.file-export", color="#1f5fd1"))
+        self.export_button.clicked.connect(self.export_tasks)
+        sort_row.addWidget(self.export_button)
         layout.addLayout(sort_row)
 
         self.task_list = QListWidget()
@@ -668,6 +675,80 @@ class MainWindow(QMainWindow):
         self.task_list.clearSelection()
         self.clear_details()
 
+    def export_tasks(self):
+        tasks = []
+        for i in range(self.task_list.count()):
+            item = self.task_list.item(i)
+            if item.isHidden():
+                continue
+            task_uuid = item.data(Qt.ItemDataRole.UserRole)
+            task = self.tasks_by_uuid.get(task_uuid)
+            if task:
+                tasks.append(task)
+        if not tasks:
+            QMessageBox.information(self, "导出", "当前列表没有可导出的任务。")
+            return
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出任务",
+            "tasks.xlsx",
+            "Excel Workbook (*.xlsx)",
+        )
+        if not file_path:
+            return
+        if not file_path.lower().endswith(".xlsx"):
+            file_path += ".xlsx"
+        try:
+            from openpyxl import Workbook
+        except ImportError:
+            self.show_error("缺少 openpyxl 依赖，请先安装：pip install openpyxl")
+            return
+        try:
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Tasks"
+            headers = [
+                "任务",
+                "状态",
+                "自定义状态",
+                "优先级",
+                "截止日期",
+                "完成时间",
+                "链接",
+                "备注",
+                "项目",
+                "UUID",
+            ]
+            sheet.append(headers)
+            for task in tasks:
+                priority_label = PRIORITY_LABELS.get((task.priority or "").upper(), task.priority or "")
+                priority_text = ""
+                if task.priority:
+                    priority_text = f"{task.priority} · {priority_label}" if priority_label else task.priority
+                due_value = ""
+                parsed_due = parse_due_date(task.due)
+                if parsed_due:
+                    due_value = parsed_due.toString("yyyy-MM-dd")
+                completed_value = self._format_completed_value(task.end)
+                sheet.append(
+                    [
+                        task.description,
+                        task.task_state,
+                        task.xstatus,
+                        priority_text,
+                        due_value,
+                        completed_value,
+                        task.link,
+                        task.note,
+                        task.project,
+                        task.uuid,
+                    ]
+                )
+            workbook.save(file_path)
+            QMessageBox.information(self, "导出", "导出成功。")
+        except Exception as exc:
+            self.show_error(str(exc))
+
     def _add_field(self, layout, label_text, icon_name, widget):
         header_row = QHBoxLayout()
         icon = QLabel()
@@ -684,6 +765,15 @@ class MainWindow(QMainWindow):
             if item.data(Qt.ItemDataRole.UserRole) == task_uuid:
                 self.task_list.setCurrentItem(item)
                 return
+
+    @staticmethod
+    def _format_completed_value(end_value: str) -> str:
+        parsed = parse_task_datetime(end_value)
+        if not parsed:
+            return ""
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone()
+        return parsed.strftime("%Y-%m-%d %H:%M")
 
 def parse_due_date(value: str) -> QDate | None:
     if not value:
