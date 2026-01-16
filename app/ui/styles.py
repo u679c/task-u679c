@@ -20,6 +20,13 @@ QFrame#DetailPanel {
     border: none;
     border-left: 1px solid #dde8f7;
 }
+QScrollArea#DetailScroll {
+    background: #f7fbff;
+    border: none;
+}
+QScrollArea#DetailScroll QWidget {
+    background: #f7fbff;
+}
 QLabel {
     color: #1a1d24;
 }

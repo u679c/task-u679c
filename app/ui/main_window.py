@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QDateEdit,
+    QScrollArea,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -405,29 +406,41 @@ class MainWindow(QMainWindow):
         header_row.addWidget(self.detail_close_button)
         layout.addLayout(header_row)
 
+        scroll = QScrollArea()
+        scroll.setObjectName("DetailScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        layout.addWidget(scroll, stretch=1)
+
+        scroll_container = QWidget()
+        scroll_layout = QVBoxLayout(scroll_container)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.setSpacing(12)
+        scroll.setWidget(scroll_container)
+
         self.detail_desc = QLineEdit()
         self.detail_desc.setPlaceholderText("任务内容")
-        self._add_field(layout, "任务内容", "fa5s.align-left", self.detail_desc)
+        self._add_field(scroll_layout, "任务内容", "fa5s.align-left", self.detail_desc)
 
         self.detail_status = QComboBox()
         self._populate_status_combo(self.detail_status)
-        self._add_field(layout, "状态", "fa5s.signal", self.detail_status)
+        self._add_field(scroll_layout, "状态", "fa5s.signal", self.detail_status)
 
         self.detail_type = QComboBox()
         self._populate_type_combo(self.detail_type)
-        self._add_field(layout, "类型", "fa5s.tags", self.detail_type)
+        self._add_field(scroll_layout, "类型", "fa5s.tags", self.detail_type)
         type_index = self.detail_type.findData("")
         if type_index >= 0:
             self.detail_type.setCurrentIndex(type_index)
 
         self.detail_link = QLineEdit()
         self.detail_link.setPlaceholderText("相关链接")
-        self._add_field(layout, "链接", "fa5s.link", self.detail_link)
+        self._add_field(scroll_layout, "链接", "fa5s.link", self.detail_link)
 
         self.detail_note = QPlainTextEdit()
         self.detail_note.setPlaceholderText("备注或描述")
         self.detail_note.setMinimumHeight(90)
-        self._add_field(layout, "描述", "fa5s.sticky-note", self.detail_note)
+        self._add_field(scroll_layout, "描述", "fa5s.sticky-note", self.detail_note)
         self.detail_note.installEventFilter(self)
 
         self.detail_priority = QComboBox()
@@ -435,15 +448,15 @@ class MainWindow(QMainWindow):
         for code in ("H", "M", "L"):
             label = f"{code} · {PRIORITY_LABELS[code]}"
             self.detail_priority.addItem(label, code)
-        self._add_field(layout, "优先级", "fa5s.flag", self.detail_priority)
+        self._add_field(scroll_layout, "优先级", "fa5s.flag", self.detail_priority)
 
         self.detail_due = QDateEdit()
         self.detail_due.setCalendarPopup(True)
         self.detail_due.setDisplayFormat("yyyy-MM-dd")
         self.detail_due.setDate(QDate.currentDate())
-        self._add_field(layout, "截止日期", "fa5s.calendar-alt", self.detail_due)
+        self._add_field(scroll_layout, "截止日期", "fa5s.calendar-alt", self.detail_due)
 
-        layout.addStretch(1)
+        scroll_layout.addStretch(1)
 
         button_row = QHBoxLayout()
         self.save_button = QPushButton("保存")
@@ -468,7 +481,6 @@ class MainWindow(QMainWindow):
         self.detail_priority.currentIndexChanged.connect(self.auto_save_task)
         self.detail_due.dateChanged.connect(self.auto_save_task)
 
-        layout.addStretch(1)
         self.detail_panel = panel
         panel.setVisible(False)
         return panel
