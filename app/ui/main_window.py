@@ -369,6 +369,7 @@ class MainWindow(QMainWindow):
 
         self.task_list = QListWidget()
         palette = self.task_list.palette()
+        # 列表选中颜色
         palette.setColor(QPalette.ColorRole.Highlight, QColor("#DBEAFE"))
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#000000"))
         self.task_list.setPalette(palette)

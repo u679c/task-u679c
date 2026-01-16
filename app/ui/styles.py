@@ -16,16 +16,16 @@ QFrame#ListPanel {
     border: none;
 }
 QFrame#DetailPanel {
-    background: #f7fbff;
+    background: #ffffff;
     border: none;
     border-left: 1px solid #dde8f7;
 }
 QScrollArea#DetailScroll {
-    background: #f7fbff;
+    background: #ffffff;
     border: none;
 }
 QScrollArea#DetailScroll QWidget {
-    background: #f7fbff;
+    background: #ffffff;
 }
 QLabel {
     color: #1a1d24;
