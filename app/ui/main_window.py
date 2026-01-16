@@ -49,6 +49,7 @@ PRIORITY_LABELS = {
 
 DEFAULT_STATUS_LABEL = "待开始"
 NONE_TYPE_LABEL = "无"
+NONE_STATUS_LABEL = "无状态"
 
 
 def normalize_task_type(value: str) -> str:
@@ -238,6 +239,7 @@ class MainWindow(QMainWindow):
         self.current_type: str | None = None
         self.expanded_filter: str | None = None
         self.type_options: list[str] = []
+        self.status_options: list[str] = []
         self.tasks_by_uuid: dict[str, TaskItem] = {}
         self.item_widgets: dict[str, TaskListItemWidget] = {}
         self.is_populating = False
@@ -247,6 +249,7 @@ class MainWindow(QMainWindow):
         self.settings_window: SettingsWindow | None = None
 
         self.reload_type_options()
+        self.reload_status_options()
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -407,7 +410,7 @@ class MainWindow(QMainWindow):
         self._add_field(layout, "任务内容", "fa5s.align-left", self.detail_desc)
 
         self.detail_status = QComboBox()
-        self.detail_status.addItems(["无状态",  "待开始", "等待评审", "进行中", "已完成"])
+        self._populate_status_combo(self.detail_status)
         self._add_field(layout, "状态", "fa5s.signal", self.detail_status)
 
         self.detail_type = QComboBox()
@@ -592,6 +595,10 @@ class MainWindow(QMainWindow):
         self.is_loading_details = True
         self.detail_desc.setText(task.description)
         self.detail_status.setCurrentText(task.xstatus)
+        if self.detail_status.currentText() != task.xstatus:
+            index = self.detail_status.findData("")
+            if index >= 0:
+                self.detail_status.setCurrentIndex(index)
         type_value = normalize_task_type(task.xtype)
         index = self.detail_type.findData(type_value)
         if index >= 0:
@@ -899,6 +906,7 @@ class MainWindow(QMainWindow):
         if self.settings_window is None or isdeleted(self.settings_window):
             self.settings_window = SettingsWindow(self.settings_service)
             self.settings_window.types_updated.connect(self.on_types_updated)
+            self.settings_window.statuses_updated.connect(self.on_statuses_updated)
         self.settings_window.show()
         self.settings_window.raise_()
         self.settings_window.activateWindow()
@@ -910,8 +918,15 @@ class MainWindow(QMainWindow):
             self.current_type = None
         self.refresh_tasks()
 
+    def on_statuses_updated(self, statuses: list[str]):
+        self.status_options = statuses
+        self._populate_status_combo(self.detail_status)
+
     def reload_type_options(self):
         self.type_options = self.settings_service.get_task_types()
+
+    def reload_status_options(self):
+        self.status_options = self.settings_service.get_statuses()
 
     def _populate_type_combo(self, combo: QComboBox):
         current_value = combo.currentData() if combo.count() else ""
@@ -921,6 +936,25 @@ class MainWindow(QMainWindow):
             combo.addItem(label, value)
         combo.blockSignals(False)
         index = combo.findData(current_value)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+        else:
+            empty_index = combo.findData("")
+            if empty_index >= 0:
+                combo.setCurrentIndex(empty_index)
+
+    def _populate_status_combo(self, combo: QComboBox):
+        current_value = combo.currentText() if combo.count() else ""
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(NONE_STATUS_LABEL, "")
+        for name in self.status_options:
+            cleaned = name.strip()
+            if not cleaned or cleaned == NONE_STATUS_LABEL:
+                continue
+            combo.addItem(cleaned, cleaned)
+        combo.blockSignals(False)
+        index = combo.findText(current_value)
         if index >= 0:
             combo.setCurrentIndex(index)
         else:

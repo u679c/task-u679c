@@ -2,6 +2,9 @@ APP_STYLESHEET = """
 QMainWindow {
     background-color: #eaf2fb;
 }
+QMainWindow#SettingsWindow {
+    background-color: #ffffff;
+}
 QFrame#Sidebar {
     background: #f5f3f2;
     border: none;
