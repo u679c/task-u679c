@@ -4,6 +4,7 @@ import sys
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
+from app.services.settings_service import SettingsService
 from app.services.task_service import TaskService
 from app.ui.main_window import MainWindow
 from app.ui.styles import APP_STYLESHEET
@@ -29,7 +30,7 @@ def main():
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
     app.setStyleSheet(APP_STYLESHEET)
-    window = MainWindow(TaskService())
+    window = MainWindow(TaskService(), SettingsService())
     window.show()
     sys.exit(app.exec())
 

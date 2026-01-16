@@ -6,6 +6,7 @@ class TaskItem:
     task_id: int | None
     uuid: str
     description: str
+    xtype: str
     note: str
     task_state: str
     xstatus: str

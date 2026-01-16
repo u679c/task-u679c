@@ -62,6 +62,25 @@ QPushButton#SidebarButton {
 QPushButton#SidebarButton:hover {
     background: #e9e7e6;
 }
+QPushButton#SidebarSubButton {
+    background: transparent;
+    color: #4b5563;
+    text-align: left;
+    padding: 6px 10px;
+    border-radius: 8px;
+}
+QPushButton#SidebarSubButton:hover {
+    background: #e9e7e6;
+}
+QPushButton#SettingsButton {
+    background: transparent;
+    border: 1px solid #e2e2e2;
+    border-radius: 8px;
+    padding: 0px;
+}
+QPushButton#SettingsButton:hover {
+    background: #e9e7e6;
+}
 QPushButton#DetailCloseButton {
     background: transparent;
     border: none;

@@ -37,7 +37,9 @@ def _icon(name: str, color: str) -> QIcon:
     return qta.icon(name, color=color)
 
 from app.models import TaskItem
+from app.services.settings_service import SettingsService
 from app.services.task_service import TaskService
+from app.ui.settings_window import SettingsWindow
 
 PRIORITY_LABELS = {
     "H": "紧急",
@@ -46,6 +48,16 @@ PRIORITY_LABELS = {
 }
 
 DEFAULT_STATUS_LABEL = "待开始"
+NONE_TYPE_LABEL = "无"
+
+
+def normalize_task_type(value: str) -> str:
+    if not value:
+        return ""
+    value = value.strip()
+    if value == NONE_TYPE_LABEL:
+        return ""
+    return value
 
 
 class TaskListItemWidget(QWidget):
@@ -69,7 +81,8 @@ class TaskListItemWidget(QWidget):
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(2)
 
-        self.title_label = QLabel(task.description or "")
+        title_text = self._format_title(task)
+        self.title_label = QLabel(title_text)
         self.title_label.setTextFormat(Qt.TextFormat.PlainText)
         self.title_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.title_label.setStyleSheet("color: #1a1d24; font-weight: 600;")
@@ -162,6 +175,13 @@ class TaskListItemWidget(QWidget):
             self.item.setSizeHint(self.sizeHint())
 
     @staticmethod
+    def _format_title(task: TaskItem) -> str:
+        xtype = normalize_task_type(task.xtype)
+        if xtype:
+            return f"{xtype}·{task.description}"
+        return task.description or ""
+
+    @staticmethod
     def _format_due(due_value: str) -> str:
         if not due_value:
             return ""
@@ -207,18 +227,26 @@ class TaskListItemWidget(QWidget):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, service: TaskService):
+    def __init__(self, service: TaskService, settings_service: SettingsService):
         super().__init__()
         self.service = service
+        self.settings_service = settings_service
         self.setWindowTitle("Taskwarrior 可视化待办")
         self.resize(1200, 720)
 
         self.current_filter = "all"
+        self.current_type: str | None = None
+        self.expanded_filter: str | None = None
+        self.type_options: list[str] = []
         self.tasks_by_uuid: dict[str, TaskItem] = {}
         self.item_widgets: dict[str, TaskListItemWidget] = {}
         self.is_populating = False
         self.current_task_uuid: str | None = None
         self.is_loading_details = False
+        self.sidebar_sections: dict[str, dict[str, object]] = {}
+        self.settings_window: SettingsWindow | None = None
+
+        self.reload_type_options()
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -270,20 +298,38 @@ class MainWindow(QMainWindow):
         title.setStyleSheet("font-size: 16px; font-weight: 600;")
         layout.addWidget(title)
 
-        self.btn_all = QPushButton("全部任务")
-        self.btn_pending = QPushButton("待办")
-        self.btn_completed = QPushButton("已完成")
-        for button in (self.btn_all, self.btn_pending, self.btn_completed):
+        sections = [
+            ("all", "全部任务"),
+            ("pending", "待办"),
+            ("completed", "已完成"),
+        ]
+        for filter_name, label in sections:
+            button = QPushButton(label)
             button.setObjectName("SidebarButton")
+            button.clicked.connect(lambda checked=False, name=filter_name: self.on_filter_clicked(name))
+            layout.addWidget(button)
 
-        self.btn_all.clicked.connect(lambda: self.set_filter("all"))
-        self.btn_pending.clicked.connect(lambda: self.set_filter("pending"))
-        self.btn_completed.clicked.connect(lambda: self.set_filter("completed"))
+            type_container = QWidget()
+            type_layout = QVBoxLayout(type_container)
+            type_layout.setContentsMargins(18, 0, 0, 6)
+            type_layout.setSpacing(4)
+            type_container.setVisible(False)
+            layout.addWidget(type_container)
 
-        layout.addWidget(self.btn_all)
-        layout.addWidget(self.btn_pending)
-        layout.addWidget(self.btn_completed)
+            self.sidebar_sections[filter_name] = {
+                "button": button,
+                "container": type_container,
+                "layout": type_layout,
+            }
         layout.addStretch(1)
+
+        self.settings_button = QPushButton()
+        self.settings_button.setObjectName("SettingsButton")
+        self.settings_button.setIcon(_icon("fa5s.cog", color="#6b7280"))
+        self.settings_button.setToolTip("设置")
+        self.settings_button.setFixedSize(32, 32)
+        self.settings_button.clicked.connect(self.open_settings)
+        layout.addWidget(self.settings_button, alignment=Qt.AlignmentFlag.AlignLeft)
 
         return sidebar
 
@@ -364,6 +410,13 @@ class MainWindow(QMainWindow):
         self.detail_status.addItems(["无状态",  "待开始", "等待评审", "进行中", "已完成"])
         self._add_field(layout, "状态", "fa5s.signal", self.detail_status)
 
+        self.detail_type = QComboBox()
+        self._populate_type_combo(self.detail_type)
+        self._add_field(layout, "类型", "fa5s.tags", self.detail_type)
+        type_index = self.detail_type.findData("")
+        if type_index >= 0:
+            self.detail_type.setCurrentIndex(type_index)
+
         self.detail_link = QLineEdit()
         self.detail_link.setPlaceholderText("相关链接")
         self._add_field(layout, "链接", "fa5s.link", self.detail_link)
@@ -407,6 +460,7 @@ class MainWindow(QMainWindow):
 
         self.detail_desc.editingFinished.connect(self.auto_save_task)
         self.detail_status.currentIndexChanged.connect(self.auto_save_task)
+        self.detail_type.currentIndexChanged.connect(self.auto_save_task)
         self.detail_link.editingFinished.connect(self.auto_save_task)
         self.detail_priority.currentIndexChanged.connect(self.auto_save_task)
         self.detail_due.dateChanged.connect(self.auto_save_task)
@@ -420,9 +474,26 @@ class MainWindow(QMainWindow):
         self.current_filter = filter_name
         self.refresh_tasks()
 
+    def on_filter_clicked(self, filter_name: str):
+        if self.current_filter == filter_name and self.expanded_filter == filter_name:
+            self.expanded_filter = None
+        else:
+            self.expanded_filter = filter_name
+        self.current_filter = filter_name
+        self.current_type = None
+        self.refresh_tasks()
+
+    def on_type_clicked(self, filter_name: str, type_value: str):
+        self.current_filter = filter_name
+        self.current_type = type_value
+        self.expanded_filter = filter_name
+        self.refresh_tasks()
+
     def refresh_tasks(self):
         try:
             tasks = self.service.fetch_tasks(self.current_filter)
+            self.update_type_submenus(tasks)
+            tasks = self.apply_type_filter(tasks)
             tasks = self.sort_tasks(tasks)
             self.tasks_by_uuid = {task.uuid: task for task in tasks if task.uuid}
             selected_uuid = None
@@ -466,6 +537,8 @@ class MainWindow(QMainWindow):
         if not getattr(self, "sort_combo", None):
             return tasks
         mode = self.sort_combo.currentData()
+        if self.current_filter == "all":
+            tasks = self._order_by_completion(tasks)
         if mode != "priority":
             if mode != "due":
                 return tasks
@@ -474,6 +547,12 @@ class MainWindow(QMainWindow):
             return [task for _, task in indexed]
         indexed = list(enumerate(tasks))
         indexed.sort(key=lambda pair: (self._priority_rank(pair[1]), pair[0]))
+        return [task for _, task in indexed]
+
+    @staticmethod
+    def _order_by_completion(tasks):
+        indexed = list(enumerate(tasks))
+        indexed.sort(key=lambda pair: (pair[1].task_state == "completed", pair[0]))
         return [task for _, task in indexed]
 
     @staticmethod
@@ -513,6 +592,14 @@ class MainWindow(QMainWindow):
         self.is_loading_details = True
         self.detail_desc.setText(task.description)
         self.detail_status.setCurrentText(task.xstatus)
+        type_value = normalize_task_type(task.xtype)
+        index = self.detail_type.findData(type_value)
+        if index >= 0:
+            self.detail_type.setCurrentIndex(index)
+        else:
+            empty_index = self.detail_type.findData("")
+            if empty_index >= 0:
+                self.detail_type.setCurrentIndex(empty_index)
         self.detail_link.setText(task.link)
         self.detail_note.setPlainText(task.note)
         if task.priority:
@@ -549,12 +636,13 @@ class MainWindow(QMainWindow):
         description = self.detail_desc.text().strip()
         note = self.detail_note.toPlainText().strip()
         xstatus = self.detail_status.currentText().strip()
+        xtype = self.detail_type.currentData() or ""
         link = self.detail_link.text().strip()
         priority = self.detail_priority.currentData() or "L"
         due = self.detail_due.date().toString("yyyy-MM-dd")
 
         try:
-            self.service.update_task(task_uuid, description, note, xstatus, link, priority, due)
+            self.service.update_task(task_uuid, description, note, xtype, xstatus, link, priority, due)
             self.refresh_tasks()
         except Exception as exc:
             self.show_error(str(exc))
@@ -613,6 +701,9 @@ class MainWindow(QMainWindow):
         self.current_task_uuid = None
         self.detail_desc.clear()
         self.detail_status.setCurrentIndex(0)
+        type_index = self.detail_type.findData("")
+        if type_index >= 0:
+            self.detail_type.setCurrentIndex(type_index)
         self.detail_link.clear()
         self.detail_note.clear()
         self.detail_priority.setCurrentIndex(0)
@@ -709,6 +800,7 @@ class MainWindow(QMainWindow):
             sheet.title = "Tasks"
             headers = [
                 "任务",
+                "类型",
                 "状态",
                 "自定义状态",
                 "优先级",
@@ -733,6 +825,7 @@ class MainWindow(QMainWindow):
                 sheet.append(
                     [
                         task.description,
+                        normalize_task_type(task.xtype),
                         task.task_state,
                         task.xstatus,
                         priority_text,
@@ -765,6 +858,97 @@ class MainWindow(QMainWindow):
             if item.data(Qt.ItemDataRole.UserRole) == task_uuid:
                 self.task_list.setCurrentItem(item)
                 return
+
+    def update_type_submenus(self, tasks):
+        for filter_name, section in self.sidebar_sections.items():
+            container = section["container"]
+            layout = section["layout"]
+            if filter_name != self.expanded_filter:
+                self._clear_layout(layout)
+                container.setVisible(False)
+                continue
+            available_types = self._available_types(tasks)
+            self._clear_layout(layout)
+            for label, value in available_types:
+                button = QPushButton(label)
+                button.setObjectName("SidebarSubButton")
+                button.clicked.connect(
+                    lambda checked=False, name=filter_name, t=value: self.on_type_clicked(name, t)
+                )
+                layout.addWidget(button)
+            container.setVisible(bool(available_types))
+
+    def apply_type_filter(self, tasks):
+        if self.current_type is None:
+            return tasks
+        return [task for task in tasks if normalize_task_type(task.xtype) == self.current_type]
+
+    def _available_types(self, tasks):
+        counts = {value: 0 for _, value in self._type_entries()}
+        for task in tasks:
+            normalized = normalize_task_type(task.xtype)
+            if normalized in counts:
+                counts[normalized] += 1
+        available = []
+        for label, value in self._type_entries():
+            if counts.get(value, 0) > 0:
+                available.append((label, value))
+        return available
+
+    def open_settings(self):
+        if self.settings_window is None or isdeleted(self.settings_window):
+            self.settings_window = SettingsWindow(self.settings_service)
+            self.settings_window.types_updated.connect(self.on_types_updated)
+        self.settings_window.show()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
+
+    def on_types_updated(self, types: list[str]):
+        self.type_options = types
+        self._populate_type_combo(self.detail_type)
+        if self.current_type not in self._type_values():
+            self.current_type = None
+        self.refresh_tasks()
+
+    def reload_type_options(self):
+        self.type_options = self.settings_service.get_task_types()
+
+    def _populate_type_combo(self, combo: QComboBox):
+        current_value = combo.currentData() if combo.count() else ""
+        combo.blockSignals(True)
+        combo.clear()
+        for label, value in self._type_entries():
+            combo.addItem(label, value)
+        combo.blockSignals(False)
+        index = combo.findData(current_value)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+        else:
+            empty_index = combo.findData("")
+            if empty_index >= 0:
+                combo.setCurrentIndex(empty_index)
+
+    def _type_entries(self):
+        entries = [(NONE_TYPE_LABEL, "")]
+        for name in self.type_options:
+            cleaned = normalize_task_type(name)
+            if not cleaned:
+                continue
+            if cleaned == NONE_TYPE_LABEL:
+                continue
+            entries.append((cleaned, cleaned))
+        return entries
+
+    def _type_values(self):
+        return {value for _, value in self._type_entries()}
+
+    @staticmethod
+    def _clear_layout(layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
 
     @staticmethod
     def _format_completed_value(end_value: str) -> str:

@@ -8,6 +8,8 @@ from app.models import TaskItem
 TASK_RC_OVERRIDES = [
     "rc.uda.xstatus.type=string",
     "rc.uda.xstatus.label=状态",
+    "rc.uda.xtype.type=string",
+    "rc.uda.xtype.label=类型",
     "rc.uda.link.type=string",
     "rc.uda.link.label=链接",
     "rc.uda.xdesc.type=string",
@@ -39,6 +41,7 @@ class TaskService:
                     task_id=item.get("id"),
                     uuid=item.get("uuid", ""),
                     description=item.get("description", ""),
+                    xtype=item.get("xtype", ""),
                     note=item.get("xdesc", ""),
                     task_state=item.get("status", ""),
                     xstatus=item.get("xstatus", ""),
@@ -59,6 +62,7 @@ class TaskService:
         task_ref: str,
         description: str,
         note: str,
+        xtype: str,
         xstatus: str,
         link: str,
         priority: str,
@@ -69,6 +73,10 @@ class TaskService:
             mods.append(f"xdesc:{note}")
         else:
             mods.append("xdesc:")
+        if xtype:
+            mods.append(f"xtype:{xtype}")
+        else:
+            mods.append("xtype:")
         if xstatus:
             mods.append(f"xstatus:{xstatus}")
         else:
